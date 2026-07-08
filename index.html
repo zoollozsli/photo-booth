@@ -105,7 +105,7 @@
     width:100%; height:100%;
     object-fit: cover;
     display:block;
-    filter: grayscale(0%) contrast(90%) brightness(107%) saturate(90%);
+    filter: grayscale(8%) contrast(84%) brightness(114%) saturate(80%);
   }
   .cell img{
     width:100%; height:100%;
@@ -115,7 +115,7 @@
   }
   .cell .haze{
     position:absolute; inset:0;
-    background: radial-gradient(ellipse at center, rgba(255,255,255,0) 44%, rgba(255,255,255,0.26) 100%);
+    background: radial-gradient(ellipse at center, rgba(236,240,248,0) 40%, rgba(236,240,248,0.34) 100%);
     pointer-events:none;
   }
   .cell.mirror video{ transform: scaleX(-1); }
@@ -550,7 +550,7 @@
       ctx.translate(targetW,0);
       ctx.scale(-1,1);
     }
-    ctx.filter = 'grayscale(0%) contrast(90%) brightness(107%) saturate(90%)';
+    ctx.filter = 'grayscale(8%) contrast(84%) brightness(114%) saturate(80%)';
     ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, targetW, targetH);
     ctx.filter = 'none';
     if(facingMode === 'user'){
@@ -572,15 +572,15 @@
   }
 
   function applyHaze(ctx, w, h){
-    // 柔焦朦朧感：邊緣泛白但中心維持清晰、保留原本氣色與顏色
-    const grad = ctx.createRadialGradient(w/2,h/2, Math.min(w,h)*0.28, w/2,h/2, Math.max(w,h)*0.78);
-    grad.addColorStop(0, 'rgba(255,255,255,0)');
-    grad.addColorStop(1, 'rgba(255,255,255,0.26)');
-    ctx.fillStyle = grad;
+    // 全畫面淡淡冷白疊層，中和室內燈光偏黃，讓膚色偏向白淨而不是蠟黃
+    ctx.fillStyle = 'rgba(232,236,246,0.14)';
     ctx.fillRect(0,0,w,h);
 
-    // 極薄一層柔光提亮，讓整體看起來霧霧的但不吃掉顏色
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    // 柔焦朦朧感：邊緣泛白但中心維持清晰、保留原本氣色與顏色
+    const grad = ctx.createRadialGradient(w/2,h/2, Math.min(w,h)*0.26, w/2,h/2, Math.max(w,h)*0.8);
+    grad.addColorStop(0, 'rgba(236,240,248,0)');
+    grad.addColorStop(1, 'rgba(236,240,248,0.34)');
+    ctx.fillStyle = grad;
     ctx.fillRect(0,0,w,h);
   }
 
