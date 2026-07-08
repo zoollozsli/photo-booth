@@ -115,7 +115,8 @@
   }
   .cell .haze{
     position:absolute; inset:0;
-    background: radial-gradient(ellipse at center, rgba(236,240,248,0) 40%, rgba(236,240,248,0.34) 100%);
+    background: radial-gradient(ellipse at center, rgba(236,240,248,0) 40%, rgba(236,240,248,0.34) 100%),
+                linear-gradient(rgba(232,236,246,0.14), rgba(232,236,246,0.14));
     pointer-events:none;
   }
   .cell.mirror video{ transform: scaleX(-1); }
@@ -241,6 +242,54 @@
     color: var(--ink-soft);
     text-align:center;
   }
+  .beauty-toggle{
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink-soft);
+    font-size: 12px;
+    cursor:pointer;
+  }
+  .beauty-toggle.on{
+    background: var(--ink);
+    border-color: var(--ink);
+    color: #fff;
+  }
+  .beauty-panel{
+    width: 100%;
+    max-width: 300px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px 12px;
+    display:flex;
+    flex-direction:column;
+    gap: 8px;
+  }
+  .slider-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .slider-label{
+    font-size: 12px;
+    color: var(--ink);
+    width: 62px;
+    flex-shrink:0;
+  }
+  .slider-row input[type=range]{
+    flex:1;
+    accent-color: var(--ink);
+    height: 20px;
+  }
+  .slider-val{
+    font-size: 11px;
+    color: var(--ink-soft);
+    width: 26px;
+    text-align:right;
+    flex-shrink:0;
+  }
 
   /* ---- Result ---- */
   .result-wrap{
@@ -311,6 +360,16 @@
     </div>
     <div class="note" id="zoomNote"></div>
 
+    <button class="beauty-toggle" id="beautyToggleBtn">✨ AI 美白</button>
+    <div class="beauty-panel" id="beautyPanel" style="display:none;">
+      <div class="slider-row">
+        <span class="slider-label">美白程度</span>
+        <input type="range" id="whitenSlider" min="0" max="100" value="55">
+        <span class="slider-val" id="whitenVal">55</span>
+      </div>
+      <div class="note" id="beautyNote"></div>
+    </div>
+
     <div class="btn-row" id="liveButtons">
       <button class="icon-btn" id="flipBtn" title="切換前後鏡頭">⟲</button>
       <button class="shutter" id="shutterBtn" title="拍照"></button>
@@ -330,6 +389,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script>
 (function(){
   const cells = Array.from(document.querySelectorAll('.cell'));
@@ -352,6 +412,11 @@
   const zoomBtns = Array.from(document.querySelectorAll('[data-zoom]'));
   const zoomRow = document.getElementById('zoomRow');
   const zoomNote = document.getElementById('zoomNote');
+  const beautyToggleBtn = document.getElementById('beautyToggleBtn');
+  const beautyPanel = document.getElementById('beautyPanel');
+  const whitenSlider = document.getElementById('whitenSlider');
+  const whitenVal = document.getElementById('whitenVal');
+  const beautyNote = document.getElementById('beautyNote');
 
   const countdownOptions = [0, 3, 5, 10];
   let countdownIdx = 0;
@@ -368,6 +433,9 @@
   let countdownSeconds = 0;
   let countdownActive = false;
   let countdownTimer = null;
+  let whitenStrength = 0.55;
+  let aiModelsReady = false;
+  let aiModelsLoading = false;
 
   function showError(msg){
     errorBox.style.display = 'block';
@@ -385,6 +453,40 @@
     countdownBtn.textContent = countdownSeconds === 0 ? 'OFF' : countdownSeconds + 's';
     countdownBtn.classList.toggle('on', countdownSeconds !== 0);
   });
+
+  beautyToggleBtn.addEventListener('click', ()=>{
+    const isOpen = beautyPanel.style.display !== 'none';
+    beautyPanel.style.display = isOpen ? 'none' : 'flex';
+    beautyToggleBtn.classList.toggle('on', !isOpen);
+  });
+  whitenSlider.addEventListener('input', ()=>{
+    whitenStrength = Number(whitenSlider.value) / 100;
+    whitenVal.textContent = whitenSlider.value;
+  });
+
+  async function ensureAiModels(){
+    if(aiModelsReady || aiModelsLoading) return;
+    if(typeof faceapi === 'undefined'){
+      beautyNote.textContent = 'AI 美白模型載入失敗（無法連線），拍照時會略過美白';
+      return;
+    }
+    aiModelsLoading = true;
+    beautyNote.textContent = 'AI 美白模型載入中，第一次使用可能要等幾秒…';
+    try{
+      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      aiModelsReady = true;
+      beautyNote.textContent = 'AI 美白模型已就緒';
+      setTimeout(()=>{ if(beautyNote.textContent === 'AI 美白模型已就緒') beautyNote.textContent=''; }, 2500);
+    }catch(e){
+      beautyNote.textContent = 'AI 美白模型載入失敗（網路問題），拍照時會略過美白';
+    }finally{
+      aiModelsLoading = false;
+    }
+  }
+  // 頁面載入時就在背景先準備好模型，拍照當下才不用等待，也完全不影響即時預覽速度
+  ensureAiModels();
 
   zoomBtns.forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -557,6 +659,11 @@
       ctx.setTransform(1,0,0,1,0,0);
     }
 
+    if(whitenStrength > 0){
+      statusText.textContent = '美白處理中…';
+      await applySkinWhiten(canvas, ctx, targetW, targetH, whitenStrength);
+    }
+
     applyHaze(ctx, targetW, targetH);
 
     pendingDataUrl = canvas.toDataURL('image/jpeg', 0.92);
@@ -569,6 +676,49 @@
     liveButtons.style.display = 'none';
     previewButtons.style.display = 'flex';
     captureBusy = false;
+  }
+
+  async function applySkinWhiten(canvas, ctx, w, h, strength){
+    if(typeof faceapi === 'undefined' || !aiModelsReady) return;
+    let detection;
+    try{
+      detection = await faceapi
+        .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
+        .withFaceLandmarks();
+    }catch(e){
+      return;
+    }
+    if(!detection) return;
+
+    const pts = detection.landmarks.positions;
+    const jawLeft = pts[0], jawRight = pts[16], chin = pts[8];
+    const browTop = Math.min(...pts.slice(17,27).map(p=>p.y));
+    const faceWidth = jawRight.x - jawLeft.x;
+    if(!faceWidth || faceWidth < 20) return;
+
+    const cx = (jawLeft.x + jawRight.x) / 2;
+    const topY = browTop - faceWidth * 0.42; // 往上延伸估算額頭/髮際線
+    const bottomY = chin.y;
+    const cy = (topY + bottomY) / 2;
+    const rx = faceWidth * 0.56;
+    const ry = (bottomY - topY) / 2 * 1.06;
+
+    // 在離屏 canvas 上畫出柔邊的臉部範圍遮罩（用模糊讓邊緣自然融合，不會有硬邊）
+    const mask = document.createElement('canvas');
+    mask.width = w; mask.height = h;
+    const mctx = mask.getContext('2d');
+    mctx.filter = `blur(${Math.max(6, faceWidth * 0.12)}px)`;
+    mctx.beginPath();
+    mctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    mctx.fillStyle = 'rgba(246,248,255,1)'; // 微冷調的亮白，避免美白後偏黃
+    mctx.fill();
+
+    // 用 screen 混合模式疊加：淺色（皮膚）被明顯提亮，深色/高飽和（唇色、眉毛、髮絲）幾乎不受影響
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.14 + strength * 0.32;
+    ctx.drawImage(mask, 0, 0);
+    ctx.restore();
   }
 
   function applyHaze(ctx, w, h){
