@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>四格拍貼</title>
+<style>
+  :root{
+    --bg: #efeeec;
+    --card: #ffffff;
+    --line: #cfcfcb;
+    --ink: #1c1c1a;
+    --ink-soft: #7a7a76;
+    --cell-empty: #d8d8d4;
+    --dot: #b7b7b2;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    margin:0; padding:0;
+    background: var(--bg);
+    font-family: "Noto Sans TC","PingFang TC","Hiragino Sans GB",sans-serif;
+    color: var(--ink);
+    overscroll-behavior: none;
+    width:100%;
+    overflow-x:hidden;
+  }
+  .app{
+    max-width: 460px;
+    margin: 0 auto;
+    min-height: 100dvh;
+    display:flex;
+    flex-direction:column;
+    padding: calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 20px);
+  }
+  header{
+    text-align:center;
+    margin-bottom: 12px;
+    flex-shrink:0;
+  }
+  header h1{
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    margin: 0 0 4px;
+    font-weight: 700;
+  }
+  header p{
+    margin:0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 1.5px;
+  }
+
+  /* ---- Photo strip (frame) ---- */
+  .frame-outer{
+    width:100%;
+    max-width: 340px;
+    margin: 0 auto;
+    flex-shrink: 1;
+    min-height: 0;
+  }
+  .frame-wrap{
+    position:relative;
+    background: var(--card);
+    border-radius: 0;
+    padding: 20px 24px 50px;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.10);
+    aspect-ratio: 2 / 3;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .frame-title{
+    text-align:center;
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.3px;
+    color: var(--ink);
+    margin: 0 0 12px;
+    flex-shrink:0;
+  }
+  .grid{
+    position:relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 10px;
+  }
+  .cell{
+    position:relative;
+    background: var(--cell-empty);
+    border-radius: 0;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:2;
+  }
+  .cell video, .cell img{
+    width:100%; height:100%;
+    object-fit: cover;
+    display:block;
+    filter: grayscale(35%) contrast(84%) brightness(112%) saturate(55%);
+  }
+  .cell .haze{
+    position:absolute; inset:0;
+    background: radial-gradient(ellipse at center, rgba(255,255,255,0) 40%, rgba(255,255,255,0.35) 100%),
+                linear-gradient(rgba(255,255,255,0.12), rgba(255,255,255,0.12));
+    pointer-events:none;
+  }
+  .cell.mirror video{ transform: scaleX(-1); }
+  .cell.active{
+    outline: 1.5px solid var(--ink);
+    outline-offset: -1.5px;
+  }
+  .cell .placeholder{
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 1px;
+  }
+  .countdown-num{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(0,0,0,0.28);
+    color:#fff;
+    font-size: 44px;
+    font-weight:700;
+    z-index: 5;
+    pointer-events:none;
+  }
+
+  /* ---- Controls ---- */
+  .controls{
+    margin-top: 16px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 10px;
+    flex-shrink:0;
+  }
+  .status{
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    text-align:center;
+    min-height: 16px;
+  }
+  .option-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .option-row .label{
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-right: 2px;
+  }
+  .opt-btn{
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink-soft);
+    font-size: 12px;
+    cursor:pointer;
+  }
+  .opt-btn.active{
+    background: var(--ink);
+    border-color: var(--ink);
+    color: #fff;
+  }
+  .btn-row{
+    display:flex; align-items:center; justify-content:center; gap: 22px;
+    margin-top: 4px;
+  }
+  .shutter{
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    background: #fff;
+    border: 4px solid var(--ink);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+    cursor:pointer;
+  }
+  .shutter:active{ transform: scale(0.94); }
+  .icon-btn{
+    width: 42px; height:42px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: #fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 16px;
+    cursor:pointer;
+    color: var(--ink);
+    flex-shrink:0;
+  }
+  .icon-btn:active{ transform: scale(0.94); }
+  .preview-actions{
+    display:flex; gap: 12px;
+  }
+  .pill-btn{
+    padding: 10px 20px;
+    border-radius: 2px;
+    border: 1px solid var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    cursor:pointer;
+    letter-spacing: 1px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .pill-btn.confirm{
+    background: var(--ink);
+    color: #fff;
+  }
+  .pill-btn.restart{ margin-top: 4px; }
+
+  .note{
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-align:center;
+  }
+
+  /* ---- Result ---- */
+  .result-wrap{
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .result-wrap img{
+    width: 100%;
+    max-width: 340px;
+    border-radius: 0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  }
+  .hint{
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align:center;
+    line-height:1.6;
+  }
+  a.download-btn{
+    display:inline-block;
+    background: var(--ink);
+    color:#fff;
+    text-decoration:none;
+    padding: 12px 26px;
+    border-radius: 2px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .error-box{
+    background:#f4f4f2; color:#5a5a56; border:1px solid #cfcfcb;
+    padding: 12px 14px; border-radius: 4px; font-size: 12.5px; line-height:1.6;
+    display:none;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>FOUR CUT</h1>
+    <p>PHOTO BOOTH</p>
+  </header>
+
+  <div id="errorBox" class="error-box"></div>
+
+  <div class="frame-outer">
+    <div class="frame-wrap" id="frameWrap">
+      <div class="frame-title">meitu</div>
+      <div class="grid" id="grid">
+        <div class="cell" data-idx="0"><span class="placeholder">1</span></div>
+        <div class="cell" data-idx="1"><span class="placeholder">2</span></div>
+        <div class="cell" data-idx="2"><span class="placeholder">3</span></div>
+        <div class="cell" data-idx="3"><span class="placeholder">4</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls">
+    <div class="status" id="statusText">準備拍攝第 1 格：左上</div>
+
+    <div class="option-row">
+      <span class="label">倒數</span>
+      <button class="opt-btn active" data-sec="0">關閉</button>
+      <button class="opt-btn" data-sec="3">3秒</button>
+      <button class="opt-btn" data-sec="5">5秒</button>
+      <button class="opt-btn" data-sec="10">10秒</button>
+    </div>
+
+    <div class="option-row" id="zoomRow" style="display:none;">
+      <span class="label">鏡頭</span>
+      <button class="opt-btn active" data-zoom="1x">1倍</button>
+      <button class="opt-btn" data-zoom="0.5x">0.5倍廣角</button>
+    </div>
+    <div class="note" id="zoomNote"></div>
+
+    <div class="btn-row" id="liveButtons">
+      <button class="icon-btn" id="flipBtn" title="切換前後鏡頭">⟲</button>
+      <button class="shutter" id="shutterBtn" title="拍照"></button>
+      <div style="width:42px;"></div>
+    </div>
+    <div class="preview-actions" id="previewButtons" style="display:none;">
+      <button class="pill-btn retake" id="retakeBtn">刪除重拍</button>
+      <button class="pill-btn confirm" id="confirmBtn">確認，下一格</button>
+    </div>
+  </div>
+
+  <div class="result-wrap" id="resultWrap">
+    <img id="resultImg" alt="四格拍貼成果">
+    <div class="hint">長按上方圖片即可儲存到相簿<br>（iOS / Android 皆適用）</div>
+    <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">下載圖片</a>
+    <button class="pill-btn restart" id="restartBtn">重新拍攝一組</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const cells = Array.from(document.querySelectorAll('.cell'));
+  const shutterBtn = document.getElementById('shutterBtn');
+  const flipBtn = document.getElementById('flipBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const confirmBtn = document.getElementById('confirmBtn');
+  const statusText = document.getElementById('statusText');
+  const liveButtons = document.getElementById('liveButtons');
+  const previewButtons = document.getElementById('previewButtons');
+  const frameWrap = document.getElementById('frameWrap');
+  const frameOuter = document.querySelector('.frame-outer');
+  const controls = document.getElementById('controls');
+  const resultWrap = document.getElementById('resultWrap');
+  const resultImg = document.getElementById('resultImg');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const errorBox = document.getElementById('errorBox');
+  const countdownBtns = Array.from(document.querySelectorAll('[data-sec]'));
+  const zoomBtns = Array.from(document.querySelectorAll('[data-zoom]'));
+  const zoomRow = document.getElementById('zoomRow');
+  const zoomNote = document.getElementById('zoomNote');
+
+  const posNames = ['左上','右上','左下','右下'];
+  let currentIndex = 0;
+  let captured = [null,null,null,null];
+  let pendingDataUrl = null;
+  let stream = null;
+  let facingMode = 'user';
+  let zoomMode = '1x';
+  let videoEl = null;
+  let backDevices = null;
+  let countdownSeconds = 0;
+  let countdownActive = false;
+  let countdownTimer = null;
+
+  function showError(msg){
+    errorBox.style.display = 'block';
+    errorBox.textContent = msg;
+  }
+  function clearError(){ errorBox.style.display = 'none'; }
+  function showZoomNote(msg){
+    zoomNote.textContent = msg;
+    if(msg){ setTimeout(()=>{ if(zoomNote.textContent===msg) zoomNote.textContent=''; }, 3200); }
+  }
+
+  countdownBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      countdownBtns.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      countdownSeconds = parseInt(btn.dataset.sec, 10);
+    });
+  });
+
+  zoomBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.classList.contains('active')) return;
+      zoomBtns.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      zoomMode = btn.dataset.zoom;
+      startCamera();
+    });
+  });
+
+  async function ensureBackDevices(){
+    try{
+      const list = await navigator.mediaDevices.enumerateDevices();
+      backDevices = list.filter(d => d.kind === 'videoinput' && /back/i.test(d.label));
+    }catch(e){ backDevices = []; }
+    return backDevices;
+  }
+
+  async function buildConstraints(){
+    if(facingMode === 'user'){
+      return { facingMode: 'user', width:{ideal:1080}, height:{ideal:1440} };
+    }
+    const devs = await ensureBackDevices();
+    if(zoomMode === '0.5x'){
+      const wide = devs.find(d => /ultra ?wide/i.test(d.label));
+      if(wide){
+        return { deviceId: { exact: wide.deviceId }, width:{ideal:1080}, height:{ideal:1440} };
+      }
+      zoomMode = '1x';
+      zoomBtns.forEach(b=>b.classList.toggle('active', b.dataset.zoom === '1x'));
+      showZoomNote('這台裝置沒有偵測到 0.5 倍廣角鏡頭，已切回 1 倍');
+    }
+    const normal = devs.find(d => /^back camera$/i.test(d.label.trim()))
+                 || devs.find(d => /back/i.test(d.label) && !/ultra|tele/i.test(d.label));
+    if(normal){
+      return { deviceId: { exact: normal.deviceId }, width:{ideal:1080}, height:{ideal:1440} };
+    }
+    return { facingMode: { exact: 'environment' }, width:{ideal:1080}, height:{ideal:1440} };
+  }
+
+  async function startCamera(){
+    clearError();
+    stopCamera();
+    zoomRow.style.display = facingMode === 'environment' ? 'flex' : 'none';
+
+    const cell = cells[currentIndex];
+    cell.classList.toggle('mirror', facingMode === 'user');
+    cell.innerHTML = '';
+    videoEl = document.createElement('video');
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline','true');
+    videoEl.muted = true;
+    const haze = document.createElement('div');
+    haze.className = 'haze';
+    cell.appendChild(videoEl);
+    cell.appendChild(haze);
+    try{
+      const constraints = await buildConstraints();
+      stream = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+      videoEl.srcObject = stream;
+      if(facingMode === 'environment') ensureBackDevices();
+    }catch(err){
+      showError('無法開啟相機，請確認已允許瀏覽器使用相機權限，且此頁面是透過 https 或 localhost 開啟。');
+    }
+  }
+
+  function stopCamera(){
+    if(stream){
+      stream.getTracks().forEach(t=>t.stop());
+      stream = null;
+    }
+  }
+
+  function renderCellPlaceholder(idx){
+    const cell = cells[idx];
+    cell.classList.remove('mirror','active');
+    if(captured[idx]){
+      cell.innerHTML = `<img src="${captured[idx]}">`;
+    } else {
+      cell.innerHTML = `<span class="placeholder">${idx+1}</span>`;
+    }
+  }
+
+  function setActiveCellLive(){
+    cells.forEach((c,i)=>{
+      c.classList.toggle('active', i === currentIndex);
+      if(i !== currentIndex) renderCellPlaceholder(i);
+    });
+    statusText.textContent = `準備拍攝第 ${currentIndex+1} 格：${posNames[currentIndex]}`;
+    liveButtons.style.display = 'flex';
+    previewButtons.style.display = 'none';
+    startCamera();
+  }
+
+  function onShutterClick(){
+    if(countdownActive){
+      cancelCountdown();
+      statusText.textContent = `已取消倒數，準備拍攝第 ${currentIndex+1} 格：${posNames[currentIndex]}`;
+      return;
+    }
+    if(countdownSeconds > 0){
+      startCountdown();
+    } else {
+      capturePhoto();
+    }
+  }
+
+  function startCountdown(){
+    countdownActive = true;
+    let remain = countdownSeconds;
+    const cell = cells[currentIndex];
+    const numEl = document.createElement('div');
+    numEl.className = 'countdown-num';
+    numEl.textContent = remain;
+    cell.appendChild(numEl);
+    statusText.textContent = '倒數中，再點一次快門可取消';
+    countdownTimer = setInterval(()=>{
+      remain -= 1;
+      if(remain <= 0){
+        clearInterval(countdownTimer);
+        countdownActive = false;
+        numEl.remove();
+        capturePhoto();
+      } else {
+        numEl.textContent = remain;
+      }
+    }, 1000);
+  }
+
+  function cancelCountdown(){
+    if(countdownTimer) clearInterval(countdownTimer);
+    countdownActive = false;
+    const numEl = cells[currentIndex].querySelector('.countdown-num');
+    if(numEl) numEl.remove();
+  }
+
+  function capturePhoto(){
+    if(!videoEl || videoEl.readyState < 2) return;
+    const cell = cells[currentIndex];
+    const rect = cell.getBoundingClientRect();
+    const targetW = 720, targetH = 720 * (rect.height/rect.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+
+    const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+    const targetRatio = targetW/targetH;
+    const srcRatio = vw/vh;
+    let sx,sy,sw,sh;
+    if(srcRatio > targetRatio){
+      sh = vh; sw = vh*targetRatio; sx = (vw-sw)/2; sy = 0;
+    } else {
+      sw = vw; sh = vw/targetRatio; sx = 0; sy = (vh-sh)/2;
+    }
+    if(facingMode === 'user'){
+      ctx.translate(targetW,0);
+      ctx.scale(-1,1);
+    }
+    ctx.filter = 'grayscale(35%) contrast(84%) brightness(112%) saturate(55%)';
+    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, targetW, targetH);
+    ctx.filter = 'none';
+    if(facingMode === 'user'){
+      ctx.setTransform(1,0,0,1,0,0);
+    }
+    applyHaze(ctx, targetW, targetH);
+
+    pendingDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    cell.classList.remove('active');
+    cell.innerHTML = `<img src="${pendingDataUrl}">`;
+    stopCamera();
+
+    statusText.textContent = `第 ${currentIndex+1} 格（${posNames[currentIndex]}）拍攝完成，確認或重拍？`;
+    liveButtons.style.display = 'none';
+    previewButtons.style.display = 'flex';
+  }
+
+  function applyHaze(ctx, w, h){
+    const grad = ctx.createRadialGradient(w/2,h/2, Math.min(w,h)*0.2, w/2,h/2, Math.max(w,h)*0.75);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.35)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,w,h);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(0,0,w,h);
+  }
+
+  function retake(){
+    pendingDataUrl = null;
+    setActiveCellLive();
+  }
+
+  function confirmPhoto(){
+    captured[currentIndex] = pendingDataUrl;
+    pendingDataUrl = null;
+    if(currentIndex < 3){
+      currentIndex += 1;
+      setActiveCellLive();
+    } else {
+      finishAndRender();
+    }
+  }
+
+  function flipCamera(){
+    if(countdownActive) cancelCountdown();
+    facingMode = facingMode === 'user' ? 'environment' : 'user';
+    zoomMode = '1x';
+    zoomBtns.forEach(b=>b.classList.toggle('active', b.dataset.zoom === '1x'));
+    startCamera();
+  }
+
+  async function finishAndRender(){
+    stopCamera();
+    controls.style.display = 'none';
+    frameOuter.style.display = 'none';
+    statusText.textContent = '';
+
+    const W = 1200, H = 1800;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#efeeec';
+    ctx.fillRect(0,0,W,H);
+
+    // title, centered at top
+    ctx.fillStyle = '#1c1c1a';
+    ctx.font = '700 64px Georgia, "Times New Roman", serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('meitu', W/2, 122);
+    ctx.textAlign = 'left';
+
+    // grid photos
+    const pad = 85;
+    const gap = 35;
+    const gridX = pad;
+    const gridY = 189;
+    const gridW = W - pad*2;
+    const gridH = 1434;
+    const cellW = (gridW - gap)/2;
+    const cellH = (gridH - gap)/2;
+    const order = [
+      [gridX, gridY],
+      [gridX+cellW+gap, gridY],
+      [gridX, gridY+cellH+gap],
+      [gridX+cellW+gap, gridY+cellH+gap]
+    ];
+    await Promise.all(order.map((pos,i)=> drawPhotoInCell(ctx, captured[i], pos[0], pos[1], cellW, cellH)));
+
+    const dataUrl = canvas.toDataURL('image/png');
+    resultImg.src = dataUrl;
+    downloadBtn.href = dataUrl;
+    resultWrap.style.display = 'flex';
+  }
+
+  function roundRectPath(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function drawPhotoInCell(ctx, dataUrl, x, y, w, h){
+    return new Promise(resolve=>{
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      if(dataUrl){
+        const img = new Image();
+        img.onload = ()=>{
+          const srcRatio = img.width/img.height;
+          const targetRatio = w/h;
+          let sx,sy,sw,sh;
+          if(srcRatio > targetRatio){
+            sh = img.height; sw = img.height*targetRatio; sx=(img.width-sw)/2; sy=0;
+          } else {
+            sw = img.width; sh = img.width/targetRatio; sx=0; sy=(img.height-sh)/2;
+          }
+          ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+          ctx.restore();
+          resolve();
+        };
+        img.src = dataUrl;
+      } else {
+        ctx.fillStyle = '#d8d8d4';
+        ctx.fillRect(x,y,w,h);
+        ctx.restore();
+        resolve();
+      }
+    });
+  }
+
+  function restartAll(){
+    captured = [null,null,null,null];
+    pendingDataUrl = null;
+    currentIndex = 0;
+    resultWrap.style.display = 'none';
+    frameOuter.style.display = 'block';
+    controls.style.display = 'flex';
+    cells.forEach((c,i)=>renderCellPlaceholder(i));
+    setActiveCellLive();
+  }
+
+  shutterBtn.addEventListener('click', onShutterClick);
+  flipBtn.addEventListener('click', flipCamera);
+  retakeBtn.addEventListener('click', retake);
+  confirmBtn.addEventListener('click', confirmPhoto);
+  restartBtn.addEventListener('click', restartAll);
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showError('此瀏覽器不支援相機存取，請改用 Safari（iOS）或 Chrome（Android）開啟本頁面。');
+  }
+
+  setActiveCellLive();
+})();
+</script>
+</body>
+</html>
