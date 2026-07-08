@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-<title>四格拍貼</title>
+<title>Four Cut</title>
 <style>
   :root{
     --bg: #efeeec;
@@ -242,54 +242,6 @@
     color: var(--ink-soft);
     text-align:center;
   }
-  .beauty-toggle{
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid var(--line);
-    background: #fff;
-    color: var(--ink-soft);
-    font-size: 12px;
-    cursor:pointer;
-  }
-  .beauty-toggle.on{
-    background: var(--ink);
-    border-color: var(--ink);
-    color: #fff;
-  }
-  .beauty-panel{
-    width: 100%;
-    max-width: 300px;
-    background: #fff;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 10px 14px 12px;
-    display:flex;
-    flex-direction:column;
-    gap: 8px;
-  }
-  .slider-row{
-    display:flex;
-    align-items:center;
-    gap: 8px;
-  }
-  .slider-label{
-    font-size: 12px;
-    color: var(--ink);
-    width: 62px;
-    flex-shrink:0;
-  }
-  .slider-row input[type=range]{
-    flex:1;
-    accent-color: var(--ink);
-    height: 20px;
-  }
-  .slider-val{
-    font-size: 11px;
-    color: var(--ink-soft);
-    width: 26px;
-    text-align:right;
-    flex-shrink:0;
-  }
 
   /* ---- Result ---- */
   .result-wrap{
@@ -351,45 +303,33 @@
   </div>
 
   <div class="controls" id="controls">
-    <div class="status" id="statusText">準備拍攝第 1 格：左上</div>
+    <div class="status" id="statusText"></div>
 
     <div class="option-row" id="zoomRow" style="display:none;">
-      <span class="label">鏡頭</span>
-      <button class="opt-btn active" data-zoom="1x">1倍</button>
-      <button class="opt-btn" data-zoom="0.5x">0.5倍廣角</button>
+      <button class="opt-btn active" data-zoom="1x">1x</button>
+      <button class="opt-btn" data-zoom="0.5x">0.5x</button>
     </div>
     <div class="note" id="zoomNote"></div>
 
-    <button class="beauty-toggle" id="beautyToggleBtn">✨ AI 美白</button>
-    <div class="beauty-panel" id="beautyPanel" style="display:none;">
-      <div class="slider-row">
-        <span class="slider-label">美白程度</span>
-        <input type="range" id="whitenSlider" min="0" max="100" value="55">
-        <span class="slider-val" id="whitenVal">55</span>
-      </div>
-      <div class="note" id="beautyNote"></div>
-    </div>
-
     <div class="btn-row" id="liveButtons">
-      <button class="icon-btn" id="flipBtn" title="切換前後鏡頭">⟲</button>
-      <button class="shutter" id="shutterBtn" title="拍照"></button>
-      <button class="icon-btn countdown-btn" id="countdownBtn" title="倒數拍照">OFF</button>
+      <button class="icon-btn" id="flipBtn" title="Flip camera">⟲</button>
+      <button class="shutter" id="shutterBtn" title="Shutter"></button>
+      <button class="icon-btn countdown-btn" id="countdownBtn" title="Timer">OFF</button>
     </div>
     <div class="preview-actions" id="previewButtons" style="display:none;">
-      <button class="pill-btn retake" id="retakeBtn">刪除重拍</button>
-      <button class="pill-btn confirm" id="confirmBtn">確認，下一格</button>
+      <button class="pill-btn retake" id="retakeBtn">Retake</button>
+      <button class="pill-btn confirm" id="confirmBtn">Next</button>
     </div>
   </div>
 
   <div class="result-wrap" id="resultWrap">
-    <img id="resultImg" alt="四格拍貼成果">
-    <div class="hint">長按上方圖片即可儲存到相簿<br>（iOS / Android 皆適用）</div>
-    <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">下載圖片</a>
-    <button class="pill-btn restart" id="restartBtn">重新拍攝一組</button>
+    <img id="resultImg" alt="Four Cut result">
+    <div class="hint">Press and hold the image to save it.<br>(Works on iOS / Android)</div>
+    <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">Download</a>
+    <button class="pill-btn restart" id="restartBtn">Start Over</button>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script>
 (function(){
   const cells = Array.from(document.querySelectorAll('.cell'));
@@ -412,16 +352,11 @@
   const zoomBtns = Array.from(document.querySelectorAll('[data-zoom]'));
   const zoomRow = document.getElementById('zoomRow');
   const zoomNote = document.getElementById('zoomNote');
-  const beautyToggleBtn = document.getElementById('beautyToggleBtn');
-  const beautyPanel = document.getElementById('beautyPanel');
-  const whitenSlider = document.getElementById('whitenSlider');
-  const whitenVal = document.getElementById('whitenVal');
-  const beautyNote = document.getElementById('beautyNote');
 
   const countdownOptions = [0, 3, 5, 10];
   let countdownIdx = 0;
 
-  const posNames = ['左上','右上','左下','右下'];
+  const posNames = ['top-left','top-right','bottom-left','bottom-right'];
   let currentIndex = 0;
   let captured = [null,null,null,null];
   let pendingDataUrl = null;
@@ -433,9 +368,6 @@
   let countdownSeconds = 0;
   let countdownActive = false;
   let countdownTimer = null;
-  let whitenStrength = 0.55;
-  let aiModelsReady = false;
-  let aiModelsLoading = false;
 
   function showError(msg){
     errorBox.style.display = 'block';
@@ -453,40 +385,6 @@
     countdownBtn.textContent = countdownSeconds === 0 ? 'OFF' : countdownSeconds + 's';
     countdownBtn.classList.toggle('on', countdownSeconds !== 0);
   });
-
-  beautyToggleBtn.addEventListener('click', ()=>{
-    const isOpen = beautyPanel.style.display !== 'none';
-    beautyPanel.style.display = isOpen ? 'none' : 'flex';
-    beautyToggleBtn.classList.toggle('on', !isOpen);
-  });
-  whitenSlider.addEventListener('input', ()=>{
-    whitenStrength = Number(whitenSlider.value) / 100;
-    whitenVal.textContent = whitenSlider.value;
-  });
-
-  async function ensureAiModels(){
-    if(aiModelsReady || aiModelsLoading) return;
-    if(typeof faceapi === 'undefined'){
-      beautyNote.textContent = 'AI 美白模型載入失敗（無法連線），拍照時會略過美白';
-      return;
-    }
-    aiModelsLoading = true;
-    beautyNote.textContent = 'AI 美白模型載入中，第一次使用可能要等幾秒…';
-    try{
-      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      aiModelsReady = true;
-      beautyNote.textContent = 'AI 美白模型已就緒';
-      setTimeout(()=>{ if(beautyNote.textContent === 'AI 美白模型已就緒') beautyNote.textContent=''; }, 2500);
-    }catch(e){
-      beautyNote.textContent = 'AI 美白模型載入失敗（網路問題），拍照時會略過美白';
-    }finally{
-      aiModelsLoading = false;
-    }
-  }
-  // 頁面載入時就在背景先準備好模型，拍照當下才不用等待，也完全不影響即時預覽速度
-  ensureAiModels();
 
   zoomBtns.forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -518,7 +416,7 @@
       }
       zoomMode = '1x';
       zoomBtns.forEach(b=>b.classList.toggle('active', b.dataset.zoom === '1x'));
-      showZoomNote('這台裝置沒有偵測到 0.5 倍廣角鏡頭，已切回 1 倍');
+      showZoomNote('0.5x lens not found on this device. Switched back to 1x.');
     }
     const normal = devs.find(d => /^back camera$/i.test(d.label.trim()))
                  || devs.find(d => /back/i.test(d.label) && !/ultra|tele/i.test(d.label));
@@ -551,7 +449,7 @@
       videoEl.srcObject = stream;
       if(facingMode === 'environment') ensureBackDevices();
     }catch(err){
-      showError('無法開啟相機，請確認已允許瀏覽器使用相機權限，且此頁面是透過 https 或 localhost 開啟。');
+      showError('Camera unavailable. Please allow camera access in your browser, and make sure this page is loaded over https or localhost.');
     }
   }
 
@@ -577,7 +475,7 @@
       c.classList.toggle('active', i === currentIndex);
       if(i !== currentIndex) renderCellPlaceholder(i);
     });
-    statusText.textContent = `準備拍攝第 ${currentIndex+1} 格：${posNames[currentIndex]}`;
+    statusText.textContent = '';
     liveButtons.style.display = 'flex';
     previewButtons.style.display = 'none';
     startCamera();
@@ -586,7 +484,7 @@
   function onShutterClick(){
     if(countdownActive){
       cancelCountdown();
-      statusText.textContent = `已取消倒數，準備拍攝第 ${currentIndex+1} 格：${posNames[currentIndex]}`;
+      statusText.textContent = '';
       return;
     }
     if(countdownSeconds > 0){
@@ -604,7 +502,7 @@
     numEl.className = 'countdown-num';
     numEl.textContent = remain;
     cell.appendChild(numEl);
-    statusText.textContent = '倒數中，再點一次快門可取消';
+    statusText.textContent = '';
     countdownTimer = setInterval(()=>{
       remain -= 1;
       if(remain <= 0){
@@ -659,11 +557,6 @@
       ctx.setTransform(1,0,0,1,0,0);
     }
 
-    if(whitenStrength > 0){
-      statusText.textContent = '美白處理中…';
-      await applySkinWhiten(canvas, ctx, targetW, targetH, whitenStrength);
-    }
-
     applyHaze(ctx, targetW, targetH);
 
     pendingDataUrl = canvas.toDataURL('image/jpeg', 0.92);
@@ -672,53 +565,10 @@
     cell.innerHTML = `<img src="${pendingDataUrl}">`;
     stopCamera();
 
-    statusText.textContent = `第 ${currentIndex+1} 格（${posNames[currentIndex]}）拍攝完成，確認或重拍？`;
+    statusText.textContent = '';
     liveButtons.style.display = 'none';
     previewButtons.style.display = 'flex';
     captureBusy = false;
-  }
-
-  async function applySkinWhiten(canvas, ctx, w, h, strength){
-    if(typeof faceapi === 'undefined' || !aiModelsReady) return;
-    let detection;
-    try{
-      detection = await faceapi
-        .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
-        .withFaceLandmarks();
-    }catch(e){
-      return;
-    }
-    if(!detection) return;
-
-    const pts = detection.landmarks.positions;
-    const jawLeft = pts[0], jawRight = pts[16], chin = pts[8];
-    const browTop = Math.min(...pts.slice(17,27).map(p=>p.y));
-    const faceWidth = jawRight.x - jawLeft.x;
-    if(!faceWidth || faceWidth < 20) return;
-
-    const cx = (jawLeft.x + jawRight.x) / 2;
-    const topY = browTop - faceWidth * 0.42; // 往上延伸估算額頭/髮際線
-    const bottomY = chin.y;
-    const cy = (topY + bottomY) / 2;
-    const rx = faceWidth * 0.56;
-    const ry = (bottomY - topY) / 2 * 1.06;
-
-    // 在離屏 canvas 上畫出柔邊的臉部範圍遮罩（用模糊讓邊緣自然融合，不會有硬邊）
-    const mask = document.createElement('canvas');
-    mask.width = w; mask.height = h;
-    const mctx = mask.getContext('2d');
-    mctx.filter = `blur(${Math.max(6, faceWidth * 0.12)}px)`;
-    mctx.beginPath();
-    mctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    mctx.fillStyle = 'rgba(246,248,255,1)'; // 微冷調的亮白，避免美白後偏黃
-    mctx.fill();
-
-    // 用 screen 混合模式疊加：淺色（皮膚）被明顯提亮，深色/高飽和（唇色、眉毛、髮絲）幾乎不受影響
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.14 + strength * 0.32;
-    ctx.drawImage(mask, 0, 0);
-    ctx.restore();
   }
 
   function applyHaze(ctx, w, h){
@@ -864,7 +714,7 @@
   restartBtn.addEventListener('click', restartAll);
 
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    showError('此瀏覽器不支援相機存取，請改用 Safari（iOS）或 Chrome（Android）開啟本頁面。');
+    showError('This browser does not support camera access. Please open this page in Safari (iOS) or Chrome (Android).');
   }
 
   setActiveCellLive();
