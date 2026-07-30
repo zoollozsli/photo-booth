@@ -238,20 +238,25 @@
     display:none;
     flex-direction:column;
     align-items:center;
-    gap: 12px;
-    margin-top: 4px;
+    gap: 8px;
+    margin-top: 0;
+    width:100%;
   }
   .sticker-stage{
     position:relative;
-    width: 100%;
-    max-width: 340px;
-    touch-action: none;
+    max-height: 54dvh;
+    max-width: 300px;
+    aspect-ratio: 603 / 1795;
+    margin: 0 auto;
+    touch-action: pan-y;
   }
   .sticker-stage img#resultImg{
     width: 100%;
+    height: 100%;
     display:block;
     border-radius: 0;
     box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    object-fit: contain;
   }
   .sticker-layer{
     position:absolute;
@@ -277,11 +282,11 @@
   .sticker-item .del-btn{
     position:absolute;
     top:-11px; right:-11px;
-    width:22px; height:22px;
+    width:24px; height:24px;
     border-radius:50%;
     background:#000;
     color:#fff;
-    font-size:13px;
+    font-size:14px;
     line-height:1;
     display:none;
     align-items:center;
@@ -291,36 +296,43 @@
   .sticker-item.selected .del-btn{ display:flex; }
   .sticker-tray{
     display:flex;
-    gap: 8px;
+    gap: 6px;
     overflow-x:auto;
     width:100%;
-    max-width: 340px;
-    padding: 2px 2px 6px;
+    max-width: 320px;
+    padding: 2px 2px 4px;
     -webkit-overflow-scrolling: touch;
+    flex-shrink:0;
   }
   .sticker-tray img{
-    width:50px; height:50px;
+    width:42px; height:42px;
     object-fit:contain;
     border:1px solid var(--line);
     border-radius:8px;
     background:#fff;
-    padding:5px;
+    padding:4px;
     flex-shrink:0;
     cursor:pointer;
   }
   .sticker-tray img:active{ transform:scale(0.94); }
   .hint{
-    font-size: 12px;
+    font-size: 10.5px;
     color: var(--ink-soft);
     text-align:center;
-    line-height:1.6;
+    line-height:1.4;
+    flex-shrink:0;
+  }
+  .result-actions{
+    display:flex;
+    gap: 10px;
+    flex-shrink:0;
   }
   a.download-btn{
     display:inline-block;
     background: var(--ink);
     color:#fff;
     text-decoration:none;
-    padding: 12px 26px;
+    padding: 11px 22px;
     border-radius: 2px;
     font-size: 13px;
     font-weight: 700;
@@ -335,7 +347,7 @@
 </head>
 <body>
 <div class="app">
-  <header>
+  <header id="appHeader">
     <h1>FOUR CUT</h1>
     <p>PHOTO BOOTH</p>
   </header>
@@ -377,9 +389,11 @@
       <div class="sticker-layer" id="stickerLayer"></div>
     </div>
     <div class="sticker-tray" id="stickerTray"></div>
-    <div class="hint">Add stickers if you like, then tap Download to save.<br>(Long-press only saves the plain photo.)</div>
-    <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">Download</a>
-    <button class="pill-btn restart" id="restartBtn">Start Over</button>
+    <div class="hint">Drag stickers to move · pinch to resize/rotate</div>
+    <div class="result-actions">
+      <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">Download</a>
+      <button class="pill-btn restart" id="restartBtn">Start Over</button>
+    </div>
   </div>
 </div>
 
@@ -395,6 +409,7 @@
   const previewButtons = document.getElementById('previewButtons');
   const frameWrap = document.getElementById('frameWrap');
   const frameOuter = document.querySelector('.frame-outer');
+  const appHeader = document.getElementById('appHeader');
   const controls = document.getElementById('controls');
   const resultWrap = document.getElementById('resultWrap');
   const resultImg = document.getElementById('resultImg');
@@ -722,6 +737,7 @@
     }catch(err){
       showError('Something went wrong while building the final image: ' + (err && err.message ? err.message : err));
     }finally{
+      appHeader.style.display = 'none';
       resultWrap.style.display = 'flex';
       renderStickerTray();
     }
@@ -769,7 +785,8 @@
     const del = document.createElement('div');
     del.className = 'del-btn';
     del.textContent = '✕';
-    del.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
+    del.addEventListener('touchstart', (e)=>{ e.stopPropagation(); }, { passive:true });
+    del.addEventListener('mousedown', (e)=>{ e.stopPropagation(); });
     del.addEventListener('click', (e)=>{
       e.stopPropagation();
       removeSticker(state.id);
@@ -802,83 +819,108 @@
     if(activeStickerId === id) activeStickerId = null;
   }
 
-  stickerLayer.addEventListener('pointerdown', (e)=>{
+  stickerLayer.addEventListener('touchstart', (e)=>{
+    if(e.target === stickerLayer) selectSticker(null);
+  }, { passive:true });
+  stickerLayer.addEventListener('mousedown', (e)=>{
     if(e.target === stickerLayer) selectSticker(null);
   });
 
   function attachStickerGestures(state){
     const el = state.el;
-    const pointers = new Map();
     let gesture = null;
 
     function stageRect(){ return stickerStage.getBoundingClientRect(); }
 
-    el.addEventListener('pointerdown', (e)=>{
-      e.preventDefault();
-      e.stopPropagation();
-      selectSticker(state.id);
-      el.setPointerCapture(e.pointerId);
-      pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    function touchPoint(t){ return { x:t.clientX, y:t.clientY }; }
 
-      if(pointers.size === 1){
+    function startGesture(touches){
+      const rect = stageRect();
+      if(touches.length === 1){
         gesture = {
           type:'drag', startX:state.x, startY:state.y,
-          px:e.clientX, py:e.clientY, rect:stageRect()
+          px: touches[0].clientX, py: touches[0].clientY, rect
         };
-      } else if(pointers.size === 2){
-        const pts = Array.from(pointers.values());
-        const dx = pts[1].x-pts[0].x, dy = pts[1].y-pts[0].y;
+      } else if(touches.length >= 2){
+        const p0 = touchPoint(touches[0]), p1 = touchPoint(touches[1]);
+        const dx = p1.x-p0.x, dy = p1.y-p0.y;
         gesture = {
           type:'pinch',
           startDist: Math.hypot(dx,dy),
           startAngle: Math.atan2(dy,dx)*180/Math.PI,
           startScale: state.scale, startRot: state.rot,
           startX: state.x, startY: state.y,
-          midStart: { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 },
-          rect: stageRect()
+          midStart: { x:(p0.x+p1.x)/2, y:(p0.y+p1.y)/2 },
+          rect
         };
       }
-    });
+    }
 
-    el.addEventListener('pointermove', (e)=>{
-      if(!pointers.has(e.pointerId)) return;
-      pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    el.addEventListener('touchstart', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      selectSticker(state.id);
+      startGesture(e.touches);
+    }, { passive:false });
 
-      if(pointers.size === 1 && gesture && gesture.type === 'drag'){
-        const dxPx = e.clientX - gesture.px;
-        const dyPx = e.clientY - gesture.py;
+    el.addEventListener('touchmove', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      if(!gesture) return;
+      const touches = e.touches;
+
+      if(gesture.type === 'drag' && touches.length === 1){
+        const dxPx = touches[0].clientX - gesture.px;
+        const dyPx = touches[0].clientY - gesture.py;
         state.x = gesture.startX + (dxPx/gesture.rect.width)*100;
         state.y = gesture.startY + (dyPx/gesture.rect.height)*100;
         applyStickerTransform(state);
-      } else if(pointers.size === 2 && gesture && gesture.type === 'pinch'){
-        const pts = Array.from(pointers.values());
-        const dx = pts[1].x-pts[0].x, dy = pts[1].y-pts[0].y;
+      } else if(touches.length >= 2){
+        if(gesture.type !== 'pinch'){ startGesture(touches); return; }
+        const p0 = touchPoint(touches[0]), p1 = touchPoint(touches[1]);
+        const dx = p1.x-p0.x, dy = p1.y-p0.y;
         const dist = Math.hypot(dx,dy);
         const angle = Math.atan2(dy,dx)*180/Math.PI;
         state.scale = Math.min(3, Math.max(0.3, gesture.startScale * (dist/gesture.startDist)));
         state.rot = gesture.startRot + (angle - gesture.startAngle);
-        const mid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
+        const mid = { x:(p0.x+p1.x)/2, y:(p0.y+p1.y)/2 };
         state.x = gesture.startX + ((mid.x-gesture.midStart.x)/gesture.rect.width)*100;
         state.y = gesture.startY + ((mid.y-gesture.midStart.y)/gesture.rect.height)*100;
         applyStickerTransform(state);
       }
-    });
+    }, { passive:false });
 
-    function endPointer(e){
-      if(!pointers.has(e.pointerId)) return;
-      pointers.delete(e.pointerId);
-      if(pointers.size === 1){
-        const remaining = Array.from(pointers.values())[0];
-        gesture = {
-          type:'drag', startX:state.x, startY:state.y,
-          px:remaining.x, py:remaining.y, rect: stageRect()
-        };
+    function endTouch(e){
+      e.stopPropagation();
+      if(e.touches.length > 0){
+        startGesture(e.touches);
       } else {
         gesture = null;
       }
     }
-    el.addEventListener('pointerup', endPointer);
-    el.addEventListener('pointercancel', endPointer);
+    el.addEventListener('touchend', endTouch);
+    el.addEventListener('touchcancel', endTouch);
+
+    // 桌機滑鼠拖曳（方便用電腦測試，不支援雙指縮放旋轉屬正常）
+    el.addEventListener('mousedown', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      selectSticker(state.id);
+      const rect = stageRect();
+      const startX = state.x, startY = state.y;
+      const px = e.clientX, py = e.clientY;
+      function onMove(ev){
+        state.x = startX + ((ev.clientX-px)/rect.width)*100;
+        state.y = startY + ((ev.clientY-py)/rect.height)*100;
+        applyStickerTransform(state);
+      }
+      function onUp(){
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
   }
 
   function flattenWithStickers(){
@@ -962,6 +1004,7 @@
     stickers = [];
     activeStickerId = null;
     baseCanvas = null;
+    appHeader.style.display = '';
     resultWrap.style.display = 'none';
     frameOuter.style.display = 'block';
     controls.style.display = 'flex';
