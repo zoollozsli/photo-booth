@@ -688,36 +688,43 @@
     frameOuter.style.display = 'none';
     statusText.textContent = '';
 
-    // 畫布用範本原圖 2 倍解析度輸出（603x1795 -> 1206x3590），確保下載清晰
-    const W = 1206, H = 3590;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
+    try{
+      // 畫布用範本原圖 2 倍解析度輸出（603x1795 -> 1206x3590），確保下載清晰
+      const W = 1206, H = 3590;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
 
-    const [bgImg, imgs] = await Promise.all([
-      loadImageForComposite('shushin-bg.png'),
-      Promise.all(captured.map(loadImageForComposite))
-    ]);
+      const [bgImg, imgs] = await Promise.all([
+        loadImageForComposite('shushin-bg.png'),
+        Promise.all(captured.map(loadImageForComposite))
+      ]);
 
-    if(bgImg){
-      ctx.drawImage(bgImg, 0, 0, W, H);
+      if(bgImg){
+        ctx.drawImage(bgImg, 0, 0, W, H);
+      } else {
+        showError('Background template image (shushin-bg.png) failed to load. Make sure it was uploaded to the same folder as index.html.');
+      }
+
+      // 三個灰色方框的精準座標（從原圖 603x1795 量測後 x2 換算）
+      const boxX = 80, boxW = 1044;
+      const boxes = [
+        { y: 350,  h: 780 },
+        { y: 1214, h: 780 },
+        { y: 2078, h: 778 }
+      ];
+      boxes.forEach((b,i)=> drawPhotoInCell(ctx, imgs[i], boxX, b.y, boxW, b.h));
+
+      baseCanvas = canvas;
+      const dataUrl = canvas.toDataURL('image/png');
+      resultImg.src = dataUrl;
+      downloadBtn.href = dataUrl;
+    }catch(err){
+      showError('Something went wrong while building the final image: ' + (err && err.message ? err.message : err));
+    }finally{
+      resultWrap.style.display = 'flex';
+      renderStickerTray();
     }
-
-    // 三個灰色方框的精準座標（從原圖 603x1795 量測後 x2 換算）
-    const boxX = 80, boxW = 1044;
-    const boxes = [
-      { y: 350,  h: 780 },
-      { y: 1214, h: 780 },
-      { y: 2078, h: 778 }
-    ];
-    boxes.forEach((b,i)=> drawPhotoInCell(ctx, imgs[i], boxX, b.y, boxW, b.h));
-
-    baseCanvas = canvas;
-    const dataUrl = canvas.toDataURL('image/png');
-    resultImg.src = dataUrl;
-    downloadBtn.href = dataUrl;
-    resultWrap.style.display = 'flex';
-    renderStickerTray();
   }
 
   function loadImageForComposite(dataUrl){
@@ -732,14 +739,18 @@
 
   // ---------- Stickers ----------
   function renderStickerTray(){
-    if(trayBuilt) return;
-    trayBuilt = true;
-    STICKER_SOURCES.forEach(src=>{
-      const thumb = document.createElement('img');
-      thumb.src = src;
-      thumb.addEventListener('click', ()=> addSticker(src));
-      stickerTray.appendChild(thumb);
-    });
+    try{
+      if(trayBuilt) return;
+      trayBuilt = true;
+      STICKER_SOURCES.forEach(src=>{
+        const thumb = document.createElement('img');
+        thumb.src = src;
+        thumb.addEventListener('click', ()=> addSticker(src));
+        stickerTray.appendChild(thumb);
+      });
+    }catch(err){
+      showError('Stickers failed to load. Make sure the "stickers" folder was uploaded alongside index.html.');
+    }
   }
 
   function addSticker(src){
