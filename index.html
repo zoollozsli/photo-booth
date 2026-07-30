@@ -244,8 +244,7 @@
   }
   .sticker-stage{
     position:relative;
-    max-height: 54dvh;
-    max-width: 300px;
+    width: min(86vw, 300px, calc(62dvh * 603 / 1795));
     aspect-ratio: 603 / 1795;
     margin: 0 auto;
     touch-action: pan-y;
@@ -264,7 +263,7 @@
   }
   .sticker-item{
     position:absolute;
-    width: 20%;
+    width: 26%;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -294,6 +293,18 @@
     cursor:pointer;
   }
   .sticker-item.selected .del-btn{ display:flex; }
+  .sticker-item .resize-handle{
+    position:absolute;
+    bottom:-12px; right:-12px;
+    width:26px; height:26px;
+    border-radius:50%;
+    background:#fff;
+    border:2.5px solid #000;
+    display:none;
+    touch-action:none;
+    cursor:nwse-resize;
+  }
+  .sticker-item.selected .resize-handle{ display:block; }
   .sticker-tray{
     display:flex;
     gap: 6px;
@@ -389,7 +400,7 @@
       <div class="sticker-layer" id="stickerLayer"></div>
     </div>
     <div class="sticker-tray" id="stickerTray"></div>
-    <div class="hint">Drag stickers to move · pinch to resize/rotate</div>
+    <div class="hint">Tap a sticker to select · drag the white dot at its corner to resize/rotate</div>
     <div class="result-actions">
       <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">Download</a>
       <button class="pill-btn restart" id="restartBtn">Start Over</button>
@@ -791,12 +802,17 @@
       e.stopPropagation();
       removeSticker(state.id);
     });
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle';
     el.appendChild(img);
     el.appendChild(del);
+    el.appendChild(handle);
     stickerLayer.appendChild(el);
     state.el = el;
+    state.handleEl = handle;
     applyStickerTransform(state);
     attachStickerGestures(state);
+    attachResizeHandle(state);
   }
 
   function applyStickerTransform(state){
@@ -825,6 +841,67 @@
   stickerLayer.addEventListener('mousedown', (e)=>{
     if(e.target === stickerLayer) selectSticker(null);
   });
+
+  function attachResizeHandle(state){
+    const handle = state.handleEl;
+
+    function centerPx(rect){
+      return { x: (state.x/100)*rect.width, y: (state.y/100)*rect.height };
+    }
+
+    function begin(clientX, clientY){
+      const rect = stickerStage.getBoundingClientRect();
+      const c = centerPx(rect);
+      const px = clientX - rect.left, py = clientY - rect.top;
+      const dx = px - c.x, dy = py - c.y;
+      return {
+        rect,
+        startDist: Math.max(10, Math.hypot(dx,dy)),
+        startAngle: Math.atan2(dy,dx) * 180/Math.PI,
+        startScale: state.scale,
+        startRot: state.rot
+      };
+    }
+
+    function move(g, clientX, clientY){
+      const px = clientX - g.rect.left, py = clientY - g.rect.top;
+      const c = centerPx(g.rect);
+      const dx = px - c.x, dy = py - c.y;
+      const dist = Math.hypot(dx,dy);
+      const angle = Math.atan2(dy,dx) * 180/Math.PI;
+      state.scale = Math.min(3, Math.max(0.3, g.startScale * (dist/g.startDist)));
+      state.rot = g.startRot + (angle - g.startAngle);
+      applyStickerTransform(state);
+    }
+
+    let g = null;
+    handle.addEventListener('touchstart', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      selectSticker(state.id);
+      g = begin(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive:false });
+    handle.addEventListener('touchmove', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      if(!g) return;
+      move(g, e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive:false });
+    handle.addEventListener('touchend', (e)=>{ e.stopPropagation(); g = null; });
+    handle.addEventListener('touchcancel', (e)=>{ e.stopPropagation(); g = null; });
+
+    handle.addEventListener('mousedown', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      selectSticker(state.id);
+      g = begin(e.clientX, e.clientY);
+      function onMove(ev){ move(g, ev.clientX, ev.clientY); }
+      function onUp(){
+        g = null;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  }
 
   function attachStickerGestures(state){
     const el = state.el;
@@ -935,7 +1012,7 @@
       const img = stickerImgCache[st.src];
       if(!img || !img.complete || img.naturalWidth === 0) return;
       const W = finalCanvas.width;
-      const drawW = 0.20 * W * st.scale;
+      const drawW = 0.26 * W * st.scale;
       const ratio = img.naturalHeight / img.naturalWidth;
       const drawH = drawW * ratio;
       const cx = (st.x/100) * finalCanvas.width;
