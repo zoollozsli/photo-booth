@@ -55,52 +55,42 @@
   /* ---- Photo strip (frame) ---- */
   .frame-outer{
     width:100%;
-    max-width: 300px;
+    max-width: 250px;
     margin: 0 auto;
     flex-shrink: 1;
     min-height: 0;
   }
   .frame-wrap{
     position:relative;
-    background: var(--card);
+    background: #7fb6e8;
     border-radius: 0;
-    padding: 20px 24px 50px;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.10);
-    aspect-ratio: 2 / 3;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.15);
+    aspect-ratio: 603 / 1795;
     width:100%;
-    display:flex;
-    flex-direction:column;
     overflow:hidden;
   }
-  .frame-title{
-    text-align:center;
-    font-family: Georgia, "Times New Roman", serif;
-    font-weight: 700;
-    font-size: 18px;
-    letter-spacing: 0.3px;
-    color: var(--ink);
-    margin: 0 0 12px;
-    flex-shrink:0;
-  }
-  .grid{
-    position:relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    display:grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 10px;
+  .frame-wrap > img.template-bg{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    display:block;
+    pointer-events:none;
+    z-index:0;
   }
   .cell{
-    position:relative;
+    position:absolute;
+    left: 6.63%;
+    width: 86.57%;
     background: var(--cell-empty);
     border-radius: 0;
     overflow:hidden;
     display:flex;
     align-items:center;
     justify-content:center;
-    z-index:2;
+    z-index:1;
   }
+  .cell.c0{ top: 9.75%; height: 21.73%; }
+  .cell.c1{ top: 33.82%; height: 21.73%; }
+  .cell.c2{ top: 57.88%; height: 21.67%; }
   .cell video{
     width:100%; height:100%;
     object-fit: cover;
@@ -121,7 +111,7 @@
   }
   .cell.mirror video{ transform: scaleX(-1); }
   .cell.active{
-    outline: 1.5px solid var(--ink);
+    outline: 1.5px solid #fff;
     outline-offset: -1.5px;
   }
   .cell .placeholder{
@@ -292,13 +282,10 @@
 
   <div class="frame-outer">
     <div class="frame-wrap" id="frameWrap">
-      <div class="frame-title">meitu</div>
-      <div class="grid" id="grid">
-        <div class="cell" data-idx="0"><span class="placeholder">1</span></div>
-        <div class="cell" data-idx="1"><span class="placeholder">2</span></div>
-        <div class="cell" data-idx="2"><span class="placeholder">3</span></div>
-        <div class="cell" data-idx="3"><span class="placeholder">4</span></div>
-      </div>
+      <img class="template-bg" src="shushin-bg.png" alt="">
+      <div class="cell c0" data-idx="0"><span class="placeholder">1</span></div>
+      <div class="cell c1" data-idx="1"><span class="placeholder">2</span></div>
+      <div class="cell c2" data-idx="2"><span class="placeholder">3</span></div>
     </div>
   </div>
 
@@ -356,9 +343,9 @@
   const countdownOptions = [0, 3, 5, 10];
   let countdownIdx = 0;
 
-  const posNames = ['top-left','top-right','bottom-left','bottom-right'];
+  const posNames = ['top','middle','bottom'];
   let currentIndex = 0;
-  let captured = [null,null,null,null];
+  let captured = [null,null,null];
   let pendingDataUrl = null;
   let stream = null;
   let facingMode = 'user';
@@ -592,7 +579,7 @@
   function confirmPhoto(){
     captured[currentIndex] = pendingDataUrl;
     pendingDataUrl = null;
-    if(currentIndex < 3){
+    if(currentIndex < cells.length - 1){
       currentIndex += 1;
       setActiveCellLive();
     } else {
@@ -614,39 +601,29 @@
     frameOuter.style.display = 'none';
     statusText.textContent = '';
 
-    const W = 1200, H = 1800;
+    // 畫布用範本原圖 2 倍解析度輸出（603x1795 -> 1206x3590），確保下載清晰
+    const W = 1206, H = 3590;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = '#efeeec';
-    ctx.fillRect(0,0,W,H);
+    const [bgImg, imgs] = await Promise.all([
+      loadImageForComposite('shushin-bg.png'),
+      Promise.all(captured.map(loadImageForComposite))
+    ]);
 
-    // title, centered at top
-    ctx.fillStyle = '#1c1c1a';
-    ctx.font = '700 64px Georgia, "Times New Roman", serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('meitu', W/2, 122);
-    ctx.textAlign = 'left';
+    if(bgImg){
+      ctx.drawImage(bgImg, 0, 0, W, H);
+    }
 
-    // grid photos
-    const pad = 85;
-    const gap = 35;
-    const gridX = pad;
-    const gridY = 189;
-    const gridW = W - pad*2;
-    const gridH = 1434;
-    const cellW = (gridW - gap)/2;
-    const cellH = (gridH - gap)/2;
-    const order = [
-      [gridX, gridY],
-      [gridX+cellW+gap, gridY],
-      [gridX, gridY+cellH+gap],
-      [gridX+cellW+gap, gridY+cellH+gap]
+    // 三個灰色方框的精準座標（從原圖 603x1795 量測後 x2 換算）
+    const boxX = 80, boxW = 1044;
+    const boxes = [
+      { y: 350,  h: 780 },
+      { y: 1214, h: 780 },
+      { y: 2078, h: 778 }
     ];
-    const imgs = await Promise.all(captured.map(loadImageForComposite));
-    order.forEach((pos,i)=> drawPhotoInCell(ctx, imgs[i], pos[0], pos[1], cellW, cellH));
+    boxes.forEach((b,i)=> drawPhotoInCell(ctx, imgs[i], boxX, b.y, boxW, b.h));
 
     const dataUrl = canvas.toDataURL('image/png');
     resultImg.src = dataUrl;
@@ -697,7 +674,7 @@
   }
 
   function restartAll(){
-    captured = [null,null,null,null];
+    captured = [null,null,null];
     pendingDataUrl = null;
     currentIndex = 0;
     resultWrap.style.display = 'none';
