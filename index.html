@@ -238,13 +238,13 @@
     display:none;
     flex-direction:column;
     align-items:center;
-    gap: 8px;
+    gap: 6px;
     margin-top: 0;
     width:100%;
   }
   .sticker-stage{
     position:relative;
-    width: min(92vw, 340px, calc(68dvh * 603 / 1795));
+    width: min(96vw, 380px, calc(85dvh * 603 / 1795));
     aspect-ratio: 603 / 1795;
     margin: 0 auto;
     touch-action: pan-y;
@@ -367,7 +367,7 @@
 
   <div class="frame-outer">
     <div class="frame-wrap" id="frameWrap">
-      <img class="template-bg" src="shushin-bg.png" alt="">
+      <img class="template-bg" src="shushin-bg.png?v=2" alt="">
       <div class="cell c0" data-idx="0"><span class="placeholder">1</span></div>
       <div class="cell c1" data-idx="1"><span class="placeholder">2</span></div>
       <div class="cell c2" data-idx="2"><span class="placeholder">3</span></div>
@@ -722,7 +722,7 @@
       const ctx = canvas.getContext('2d');
 
       const [bgImg, imgs] = await Promise.all([
-        loadImageForComposite('shushin-bg.png'),
+        loadImageForComposite('shushin-bg.png?v=2'),
         Promise.all(captured.map(loadImageForComposite))
       ]);
 
