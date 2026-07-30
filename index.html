@@ -241,12 +241,74 @@
     gap: 12px;
     margin-top: 4px;
   }
-  .result-wrap img{
+  .sticker-stage{
+    position:relative;
     width: 100%;
     max-width: 340px;
+    touch-action: none;
+  }
+  .sticker-stage img#resultImg{
+    width: 100%;
+    display:block;
     border-radius: 0;
     box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   }
+  .sticker-layer{
+    position:absolute;
+    inset:0;
+  }
+  .sticker-item{
+    position:absolute;
+    width: 20%;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .sticker-item img{
+    width:100%;
+    display:block;
+    pointer-events:none;
+    -webkit-user-drag:none;
+  }
+  .sticker-item.selected{
+    outline: 1.5px dashed rgba(0,0,0,0.55);
+    outline-offset: 4px;
+  }
+  .sticker-item .del-btn{
+    position:absolute;
+    top:-11px; right:-11px;
+    width:22px; height:22px;
+    border-radius:50%;
+    background:#000;
+    color:#fff;
+    font-size:13px;
+    line-height:1;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+  }
+  .sticker-item.selected .del-btn{ display:flex; }
+  .sticker-tray{
+    display:flex;
+    gap: 8px;
+    overflow-x:auto;
+    width:100%;
+    max-width: 340px;
+    padding: 2px 2px 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sticker-tray img{
+    width:50px; height:50px;
+    object-fit:contain;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#fff;
+    padding:5px;
+    flex-shrink:0;
+    cursor:pointer;
+  }
+  .sticker-tray img:active{ transform:scale(0.94); }
   .hint{
     font-size: 12px;
     color: var(--ink-soft);
@@ -310,8 +372,12 @@
   </div>
 
   <div class="result-wrap" id="resultWrap">
-    <img id="resultImg" alt="Four Cut result">
-    <div class="hint">Press and hold the image to save it.<br>(Works on iOS / Android)</div>
+    <div class="sticker-stage" id="stickerStage">
+      <img id="resultImg" alt="Four Cut result">
+      <div class="sticker-layer" id="stickerLayer"></div>
+    </div>
+    <div class="sticker-tray" id="stickerTray"></div>
+    <div class="hint">Add stickers if you like, then tap Download to save.<br>(Long-press only saves the plain photo.)</div>
     <a class="download-btn" id="downloadBtn" download="four-cut-photo.png">Download</a>
     <button class="pill-btn restart" id="restartBtn">Start Over</button>
   </div>
@@ -334,6 +400,27 @@
   const resultImg = document.getElementById('resultImg');
   const downloadBtn = document.getElementById('downloadBtn');
   const restartBtn = document.getElementById('restartBtn');
+  const stickerStage = document.getElementById('stickerStage');
+  const stickerLayer = document.getElementById('stickerLayer');
+  const stickerTray = document.getElementById('stickerTray');
+
+  const STICKER_SOURCES = [
+    'stickers/flower-01.png','stickers/flower-02.png','stickers/flower-03.png',
+    'stickers/flower-04.png','stickers/flower-05.png','stickers/flower-06.png',
+    'stickers/flower-07.png','stickers/flower-08.png','stickers/flower-09.png',
+    'stickers/flower-10.png','stickers/flower-11.png','stickers/flower-12.png'
+  ];
+  const stickerImgCache = {};
+  STICKER_SOURCES.forEach(src=>{
+    const im = new Image();
+    im.src = src;
+    stickerImgCache[src] = im;
+  });
+  let stickers = [];
+  let stickerSeq = 0;
+  let activeStickerId = null;
+  let baseCanvas = null;
+  let trayBuilt = false;
   const errorBox = document.getElementById('errorBox');
   const countdownBtn = document.getElementById('countdownBtn');
   const zoomBtns = Array.from(document.querySelectorAll('[data-zoom]'));
@@ -625,10 +712,12 @@
     ];
     boxes.forEach((b,i)=> drawPhotoInCell(ctx, imgs[i], boxX, b.y, boxW, b.h));
 
+    baseCanvas = canvas;
     const dataUrl = canvas.toDataURL('image/png');
     resultImg.src = dataUrl;
     downloadBtn.href = dataUrl;
     resultWrap.style.display = 'flex';
+    renderStickerTray();
   }
 
   function loadImageForComposite(dataUrl){
@@ -640,6 +729,187 @@
       img.src = dataUrl;
     });
   }
+
+  // ---------- Stickers ----------
+  function renderStickerTray(){
+    if(trayBuilt) return;
+    trayBuilt = true;
+    STICKER_SOURCES.forEach(src=>{
+      const thumb = document.createElement('img');
+      thumb.src = src;
+      thumb.addEventListener('click', ()=> addSticker(src));
+      stickerTray.appendChild(thumb);
+    });
+  }
+
+  function addSticker(src){
+    const state = { id: 'st'+(stickerSeq++), src, x:50, y:50, scale:1, rot:0 };
+    stickers.push(state);
+    buildStickerEl(state);
+    selectSticker(state.id);
+  }
+
+  function buildStickerEl(state){
+    const el = document.createElement('div');
+    el.className = 'sticker-item';
+    const img = document.createElement('img');
+    img.src = state.src;
+    img.draggable = false;
+    const del = document.createElement('div');
+    del.className = 'del-btn';
+    del.textContent = '✕';
+    del.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
+    del.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      removeSticker(state.id);
+    });
+    el.appendChild(img);
+    el.appendChild(del);
+    stickerLayer.appendChild(el);
+    state.el = el;
+    applyStickerTransform(state);
+    attachStickerGestures(state);
+  }
+
+  function applyStickerTransform(state){
+    state.el.style.left = state.x + '%';
+    state.el.style.top = state.y + '%';
+    state.el.style.transform = `translate(-50%,-50%) rotate(${state.rot}deg) scale(${state.scale})`;
+  }
+
+  function selectSticker(id){
+    activeStickerId = id;
+    stickers.forEach(s=>{ if(s.el) s.el.classList.toggle('selected', s.id === id); });
+  }
+
+  function removeSticker(id){
+    const idx = stickers.findIndex(s=>s.id===id);
+    if(idx > -1){
+      stickers[idx].el.remove();
+      stickers.splice(idx,1);
+    }
+    if(activeStickerId === id) activeStickerId = null;
+  }
+
+  stickerLayer.addEventListener('pointerdown', (e)=>{
+    if(e.target === stickerLayer) selectSticker(null);
+  });
+
+  function attachStickerGestures(state){
+    const el = state.el;
+    const pointers = new Map();
+    let gesture = null;
+
+    function stageRect(){ return stickerStage.getBoundingClientRect(); }
+
+    el.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      selectSticker(state.id);
+      el.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+      if(pointers.size === 1){
+        gesture = {
+          type:'drag', startX:state.x, startY:state.y,
+          px:e.clientX, py:e.clientY, rect:stageRect()
+        };
+      } else if(pointers.size === 2){
+        const pts = Array.from(pointers.values());
+        const dx = pts[1].x-pts[0].x, dy = pts[1].y-pts[0].y;
+        gesture = {
+          type:'pinch',
+          startDist: Math.hypot(dx,dy),
+          startAngle: Math.atan2(dy,dx)*180/Math.PI,
+          startScale: state.scale, startRot: state.rot,
+          startX: state.x, startY: state.y,
+          midStart: { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 },
+          rect: stageRect()
+        };
+      }
+    });
+
+    el.addEventListener('pointermove', (e)=>{
+      if(!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+      if(pointers.size === 1 && gesture && gesture.type === 'drag'){
+        const dxPx = e.clientX - gesture.px;
+        const dyPx = e.clientY - gesture.py;
+        state.x = gesture.startX + (dxPx/gesture.rect.width)*100;
+        state.y = gesture.startY + (dyPx/gesture.rect.height)*100;
+        applyStickerTransform(state);
+      } else if(pointers.size === 2 && gesture && gesture.type === 'pinch'){
+        const pts = Array.from(pointers.values());
+        const dx = pts[1].x-pts[0].x, dy = pts[1].y-pts[0].y;
+        const dist = Math.hypot(dx,dy);
+        const angle = Math.atan2(dy,dx)*180/Math.PI;
+        state.scale = Math.min(3, Math.max(0.3, gesture.startScale * (dist/gesture.startDist)));
+        state.rot = gesture.startRot + (angle - gesture.startAngle);
+        const mid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
+        state.x = gesture.startX + ((mid.x-gesture.midStart.x)/gesture.rect.width)*100;
+        state.y = gesture.startY + ((mid.y-gesture.midStart.y)/gesture.rect.height)*100;
+        applyStickerTransform(state);
+      }
+    });
+
+    function endPointer(e){
+      if(!pointers.has(e.pointerId)) return;
+      pointers.delete(e.pointerId);
+      if(pointers.size === 1){
+        const remaining = Array.from(pointers.values())[0];
+        gesture = {
+          type:'drag', startX:state.x, startY:state.y,
+          px:remaining.x, py:remaining.y, rect: stageRect()
+        };
+      } else {
+        gesture = null;
+      }
+    }
+    el.addEventListener('pointerup', endPointer);
+    el.addEventListener('pointercancel', endPointer);
+  }
+
+  function flattenWithStickers(){
+    if(!baseCanvas) return null;
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = baseCanvas.width;
+    finalCanvas.height = baseCanvas.height;
+    const ctx = finalCanvas.getContext('2d');
+    ctx.drawImage(baseCanvas, 0, 0);
+
+    stickers.forEach(st=>{
+      const img = stickerImgCache[st.src];
+      if(!img || !img.complete || img.naturalWidth === 0) return;
+      const W = finalCanvas.width;
+      const drawW = 0.20 * W * st.scale;
+      const ratio = img.naturalHeight / img.naturalWidth;
+      const drawH = drawW * ratio;
+      const cx = (st.x/100) * finalCanvas.width;
+      const cy = (st.y/100) * finalCanvas.height;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(st.rot * Math.PI/180);
+      ctx.drawImage(img, -drawW/2, -drawH/2, drawW, drawH);
+      ctx.restore();
+    });
+
+    return finalCanvas.toDataURL('image/png');
+  }
+
+  downloadBtn.addEventListener('click', (e)=>{
+    if(stickers.length === 0) return; // href already points to the base composite
+    e.preventDefault();
+    const finalUrl = flattenWithStickers();
+    if(!finalUrl) return;
+    resultImg.src = finalUrl;
+    downloadBtn.href = finalUrl;
+    stickerLayer.innerHTML = '';
+    stickers = [];
+    activeStickerId = null;
+    downloadBtn.click();
+  });
+  // ---------- End stickers ----------
 
   function roundRectPath(ctx,x,y,w,h,r){
     ctx.beginPath();
@@ -677,6 +947,10 @@
     captured = [null,null,null];
     pendingDataUrl = null;
     currentIndex = 0;
+    stickerLayer.innerHTML = '';
+    stickers = [];
+    activeStickerId = null;
+    baseCanvas = null;
     resultWrap.style.display = 'none';
     frameOuter.style.display = 'block';
     controls.style.display = 'flex';
